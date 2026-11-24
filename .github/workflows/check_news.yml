@@ -1,29 +1,37 @@
 name: Pokémon GO Fest ニュース監視
+
 on:
-schedule:
-- cron: "*/15 * * * *"
-workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
 permissions:
-contents: write
+  contents: write
+
 jobs:
-check:
-runs-on: ubuntu-latest
-steps:
-- name: リポジトリのファイルを取得
-uses: actions/checkout@v4
-- name: Pythonを準備
-uses: actions/setup-python@v5
-with:
-python-version: "3.11"
-- name: 必要な機能をインストール
-run: pip install -r requirements.txt
-- name: ニュースをチェックしてDiscordに通知
-env:
-DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-run: python main.py
-- name: 通知済みURLを記録ファイルに自動保存
-run: |
-git config user.name "github-actions[bot]"
-git config user.email "github-actions[bot]@github.com"
-git add notified_urls.txt
-git diff --staged --quiet || (git commit -m "通知済みURLを更新" && git push)
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリのファイルを取得
+        uses: actions/checkout@v4
+
+      - name: Pythonを準備
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 必要な機能をインストール
+        run: pip install -r requirements.txt
+
+      - name: ニュースをチェックしてDiscordに通知
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python main.py
+
+      - name: 通知済みURLを記録ファイルに自動保存
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@://github.com"
+          git add notified_urls.txt
+          git diff --staged --quiet || (git commit -m "通知済みURLを更新" && git push)
