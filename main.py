@@ -2,7 +2,7 @@ import os
 import re
 from urllib.parse import urljoin, urlparse
 import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 TEST_MODE = True
 
@@ -46,40 +46,39 @@ def normalize_url(href):
 
 
 def fetch_news_list():
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
-    }
-    response = requests.get(NEWS_URL, headers=headers, timeout=30)
-    response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
     articles = []
     seen = set()
 
-    for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"]
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(locale="ja-JP")
+        page.goto(NEWS_URL, wait_until="networkidle", timeout=60000)
+        page.wait_for_timeout(3000)
+
+        links = page.eval_on_selector_all(
+            "a[href]",
+            "els => els.map(e => ({href: e.getAttribute('href'), text: e.innerText.trim()}))"
+        )
+        browser.close()
+
+    for item in links:
+        href = item.get("href") or ""
+        text = " ".join((item.get("text") or "").split())
+
         if not ("/news/" in href or "/post/" in href):
             continue
         if re.search(r"/news/?(\?.*)?$", href) or "/page/" in href:
             continue
 
         clean_url = normalize_url(href)
-        if clean_url in seen:
-            continue
-
-        title = a_tag.get_text(" ", strip=True)
-        if not title:
+        if clean_url in seen or not text:
             continue
 
         seen.add(clean_url)
         articles.append({
-            "title": title,
+            "title": text,
             "clean_url": clean_url,
-            "ja_url": f"{clean_url}?hl=ja",
+            "url": clean_url,
         })
 
     return articles
@@ -96,7 +95,7 @@ def send_discord_notification(webhook_url, article, is_test=False):
     else:
         header = "🎉 **Pokémon GO Fest 関連ニュースを検知しました！**"
 
-    message = f"{header}\n**{article['title']}**\n{article['ja_url']}"
+    message = f"{header}\n**{article['title']}**\n{article['url']}"
 
     response = requests.post(
         webhook_url,
@@ -109,10 +108,7 @@ def send_discord_notification(webhook_url, article, is_test=False):
 def main():
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
     if not webhook_url:
-        raise ValueError(
-            "DISCORD_WEBHOOK_URL が設定されていません。"
-            "GitHubの Secrets に登録されているか確認してください。"
-        )
+        raise ValueError("DISCORD_WEBHOOK_URL が設定されていません。")
 
     notified_urls = load_notified_urls()
     articles = fetch_news_list()
@@ -123,7 +119,7 @@ def main():
         return
 
     if TEST_MODE:
-        latest_article = articles
+        latest_article = articles[0]
         print(f"テスト通知を送信します: {latest_article['title']}")
         send_discord_notification(webhook_url, latest_article, is_test=True)
         print("テスト通知の送信に成功しました！")
