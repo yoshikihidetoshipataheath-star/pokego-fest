@@ -4,7 +4,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from playwright.sync_api import sync_playwright
 
-TEST_MODE = True
+TEST_MODE = False
 
 NEWS_URL = "https://pokemongolive.com"
 
